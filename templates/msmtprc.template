@@ -1,0 +1,21 @@
+# File: /opt/scripts/cdn/templates/msmtprc.template (generates /etc/msmtprc)
+# Purpose: msmtp configuration template for SMTP email relay
+#          Used for sending quota alerts and notifications
+# Permissions: 644
+
+defaults
+auth           on
+tls            ${TLS_SETTING}
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+# CDN System Account
+account        cdn
+host           ${SMTP_HOST}
+port           ${SMTP_PORT}
+from           ${SMTP_FROM}
+user           ${SMTP_USER}
+password       ${SMTP_PASS}
+
+# Set as default
+account default : cdn

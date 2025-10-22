@@ -1,0 +1,82 @@
+# File: /opt/scripts/cdn/templates/gitea-app.ini.template (generates ${GITEA_WORK_DIR}/custom/conf/app.ini)
+# Purpose: Gitea application configuration for CDN system
+#          Configures Gitea for multi-tenant version control and repository management
+# Generated: $(date)
+
+APP_NAME = CDN Management Portal
+RUN_MODE = prod
+RUN_USER = git
+
+[server]
+PROTOCOL         = http
+DOMAIN           = ${GITEA_DOMAIN}
+ROOT_URL         = https://${GITEA_DOMAIN}/
+HTTP_PORT        = 3000
+DISABLE_SSH      = false
+SSH_PORT         = ${SFTP_PORT}
+START_SSH_SERVER = false
+OFFLINE_MODE     = false
+
+[database]
+DB_TYPE  = sqlite3
+PATH     = ${GITEA_WORK_DIR}/data/gitea.db
+
+[repository]
+ROOT = ${GIT_DIR}
+DEFAULT_BRANCH = master
+FORCE_PRIVATE = false
+
+[repository.upload]
+ENABLED = true
+MAX_SIZE = 100
+MAX_FILES = 10
+
+[repository.pull-request]
+DEFAULT_MERGE_STYLE = merge
+
+[ui]
+DEFAULT_THEME = auto
+THEMES = auto,gitea,arc-green
+
+[security]
+INSTALL_LOCK   = true
+SECRET_KEY     = ${SECRET_KEY}
+INTERNAL_TOKEN = ${INTERNAL_TOKEN}
+
+[oauth2]
+JWT_SECRET = ${JWT_SECRET}
+
+[service]
+DISABLE_REGISTRATION = true
+REQUIRE_SIGNIN_VIEW  = false
+DEFAULT_KEEP_EMAIL_PRIVATE = true
+DEFAULT_ALLOW_CREATE_ORGANIZATION = false
+NO_REPLY_ADDRESS = noreply.${CDN_DOMAIN}
+
+[log]
+MODE      = file
+LEVEL     = Info
+ROOT_PATH = ${GITEA_WORK_DIR}/log
+
+[session]
+PROVIDER = file
+PROVIDER_CONFIG = ${GITEA_WORK_DIR}/data/sessions
+
+[picture]
+DISABLE_GRAVATAR = true
+ENABLE_FEDERATED_AVATAR = false
+
+[attachment]
+ENABLED = true
+MAX_SIZE = 100
+MAX_FILES = 10
+
+[admin]
+DISABLE_REGULAR_ORG_CREATION = true
+
+[openid]
+ENABLE_OPENID_SIGNIN = false
+ENABLE_OPENID_SIGNUP = false
+
+[mailer]
+ENABLED = false
