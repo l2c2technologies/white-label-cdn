@@ -28,7 +28,8 @@ if [[ "$SMTP_ENABLED" == "true" ]]; then
     
     process_template "${SCRIPT_DIR}/templates/msmtprc.template" "/etc/msmtprc"
     
-    chmod 644 /etc/msmtprc
+    chmod 600 /etc/msmtprc
+    chown root:root /etc/msmtprc
     touch /var/log/msmtp.log
     chmod 666 /var/log/msmtp.log
     
