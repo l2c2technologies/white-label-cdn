@@ -162,31 +162,31 @@ deploy_all_files() {
     
     # Main orchestrator
     if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-initial-setup.sh" "${INSTALL_DIR}/cdn-initial-setup.sh" 755; then
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
     else
-        ((files_failed++))
+        files_failed=$((files_failed + 1))
     fi
 
     # Main tenant manager
     if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-tenant-manager.sh" "${INSTALL_DIR}/cdn-tenant-manager.sh" 755; then
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
     else
-        ((files_failed++))
+        files_failed=$((files_failed + 1))
     fi
 
     # Uninstaller
     if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-uninstall.sh" "${INSTALL_DIR}/cdn-uninstall.sh" 755; then
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
     else
-        ((files_failed++))
+        files_failed=$((files_failed + 1))
     fi
 
     # Monitoring setup script (NEW)
     if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-monitoring-setup.sh" "${INSTALL_DIR}/cdn-monitoring-setup.sh" 755; then
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
         log "✓ Deployed monitoring setup script"
     else
-        ((files_failed++))
+        files_failed=$((files_failed + 1))
         warn "Monitoring setup script not found (optional)"
     fi
 
@@ -195,9 +195,9 @@ deploy_all_files() {
     log "Deploying helper scripts..."
     for helper in cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/helpers/${helper}" "${INSTALL_DIR}/helpers/${helper}" 755; then
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
         else
-            ((files_failed++))
+            files_failed=$((files_failed + 1))
         fi
     done
     
@@ -213,10 +213,10 @@ deploy_all_files() {
     for monitor_script in "${monitoring_scripts[@]}"; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/monitoring/${monitor_script}" \
                       "${INSTALL_DIR}/monitoring/${monitor_script}" 755; then
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
             log "✓ Deployed monitoring/${monitor_script}"
         else
-            ((files_failed++))
+            files_failed=$((files_failed + 1))
             warn "Monitoring script not found: ${monitor_script} (optional)"
         fi
     done
@@ -227,9 +227,9 @@ deploy_all_files() {
     for include in common.sh step1-domains.sh step2-sftp.sh step3-smtp.sh \
                    step4-letsencrypt.sh step5-paths.sh step6-gitea-admin.sh step7-summary.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/includes/${include}" "${INSTALL_DIR}/includes/${include}" 644; then
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
         else
-            ((files_failed++))
+            files_failed=$((files_failed + 1))
         fi
     done
     
@@ -238,9 +238,9 @@ deploy_all_files() {
     log "Deploying library files..."
     for lib in install-packages.sh install-nginx.sh install-gitea.sh install-helpers.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/lib/${lib}" "${INSTALL_DIR}/lib/${lib}" 644; then
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
         else
-            ((files_failed++))
+            files_failed=$((files_failed + 1))
         fi
     done
     
@@ -251,9 +251,9 @@ deploy_all_files() {
                     letsencrypt-setup.sh.template msmtprc.template; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/templates/${template}" \
                       "${INSTALL_DIR}/templates/${template}" 644; then
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
         else
-            ((files_failed++))
+            files_failed=$((files_failed + 1))
         fi
     done
     
@@ -262,9 +262,9 @@ deploy_all_files() {
     for nginx_template in cdn.conf.template gitea.conf.template; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/templates/nginx/${nginx_template}" \
                       "${INSTALL_DIR}/templates/nginx/${nginx_template}" 644; then
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
         else
-            ((files_failed++))
+            files_failed=$((files_failed + 1))
         fi
     done
     
@@ -274,18 +274,18 @@ deploy_all_files() {
     # Original autocommit template
     if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-autocommit@.service" \
                   "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" 644; then
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
     else
-        ((files_failed++))
+        files_failed=$((files_failed + 1))
     fi
     
     # NEW: Quota monitor template
     if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-quota-monitor@.service" \
                   "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" 644; then
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
         log "✓ Deployed quota monitor systemd template"
     else
-        ((files_failed++))
+        files_failed=$((files_failed + 1))
         warn "Quota monitor systemd template not found (optional)"
     fi
     
@@ -295,7 +295,7 @@ deploy_all_files() {
     for doc in INSTALL.md README.md QUICKSTART.md; do
         if [[ -f "${SCRIPT_SOURCE_DIR}/${doc}" ]]; then
             deploy_file "${SCRIPT_SOURCE_DIR}/${doc}" "${INSTALL_DIR}/${doc}" 644
-            ((files_deployed++))
+            files_deployed=$((files_deployed + 1))
         else
             warn "Documentation file not found: ${doc} (optional)"
         fi
@@ -306,7 +306,7 @@ deploy_all_files() {
     # Copy deploy.sh itself to installation directory
     if [[ -f "${SCRIPT_SOURCE_DIR}/deploy.sh" ]]; then
         deploy_file "${SCRIPT_SOURCE_DIR}/deploy.sh" "${INSTALL_DIR}/deploy.sh" 755
-        ((files_deployed++))
+        files_deployed=$((files_deployed + 1))
     fi
     
     echo ""
@@ -334,7 +334,7 @@ validate_deployment() {
         log "✓ cdn-initial-setup.sh is executable"
     else
         error "cdn-initial-setup.sh installation failed"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     fi
     
     # Check tenant manager
@@ -342,7 +342,7 @@ validate_deployment() {
         log "✓ cdn-tenant-manager.sh is executable"
     else
         error "cdn-tenant-manager.sh installation failed"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     fi
     
     # Check uninstaller
@@ -350,7 +350,7 @@ validate_deployment() {
         log "✓ cdn-uninstall.sh is executable"
     else
         error "cdn-uninstall.sh installation failed"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     fi
 
     # Check monitoring setup (optional but should warn)
@@ -369,7 +369,7 @@ validate_deployment() {
             log "✓ ${helper} is executable"
         else
             error "Helper script not executable: $helper"
-            ((validation_errors++))
+            validation_errors=$((validation_errors + 1))
         fi
     done
     
@@ -386,7 +386,7 @@ validate_deployment() {
     for monitor_script in "${monitoring_scripts[@]}"; do
         if [[ -x "${INSTALL_DIR}/monitoring/${monitor_script}" ]]; then
             log "✓ monitoring/${monitor_script} is executable"
-            ((monitoring_count++))
+            monitoring_count=$((monitoring_count + 1))
         else
             warn "Monitoring script not found: ${monitor_script} (optional)"
         fi
@@ -409,7 +409,7 @@ validate_deployment() {
             log "✓ ${include} present"
         else
             error "Include file missing: $include"
-            ((validation_errors++))
+            validation_errors=$((validation_errors + 1))
         fi
     done
     
@@ -422,7 +422,7 @@ validate_deployment() {
             log "✓ ${lib} present"
         else
             error "Library file missing: $lib"
-            ((validation_errors++))
+            validation_errors=$((validation_errors + 1))
         fi
     done
     
@@ -435,7 +435,7 @@ validate_deployment() {
             log "✓ ${template} present"
         else
             error "Template file missing: $template"
-            ((validation_errors++))
+            validation_errors=$((validation_errors + 1))
         fi
     done
     
@@ -445,21 +445,21 @@ validate_deployment() {
         log "✓ Nginx templates present"
     else
         error "Nginx template files missing"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     fi
     
     # Check systemd templates
     local systemd_templates=0
     if [[ -f "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" ]]; then
-        ((systemd_templates++))
+        systemd_templates=$((systemd_templates + 1))
         log "✓ Autocommit systemd template present"
     else
         error "Autocommit systemd template missing"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     fi
     
     if [[ -f "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" ]]; then
-        ((systemd_templates++))
+        systemd_templates=$((systemd_templates + 1))
         log "✓ Quota monitor systemd template present"
     else
         warn "Quota monitor systemd template not found (monitoring unavailable)"
@@ -472,14 +472,14 @@ validate_deployment() {
     # Check main scripts syntax
     if ! bash -n "${INSTALL_DIR}/cdn-initial-setup.sh" 2>/dev/null; then
         error "Syntax error in main orchestrator"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     else
         log "✓ Main orchestrator syntax valid"
     fi
     
     if ! bash -n "${INSTALL_DIR}/cdn-tenant-manager.sh" 2>/dev/null; then
         error "Syntax error in tenant manager"
-        ((validation_errors++))
+        validation_errors=$((validation_errors + 1))
     else
         log "✓ Tenant manager syntax valid"
     fi
