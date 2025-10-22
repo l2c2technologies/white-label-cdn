@@ -548,7 +548,9 @@ EOFBODY1
     fi
     
     # Send email
-    if echo "$email_body" | mail -s "$subject" "$recipients" 2>/dev/null; then
+    local recipient_list="${recipients//,/ }"
+    
+    if echo -e "Subject: $subject\n\n$email_body" | msmtp $recipient_list 2>/dev/null; then
         log "✓ Quota alert email sent for $tenant_name ($alert_level)"
         
         # Record that alert was sent
@@ -728,7 +730,10 @@ EOFBODY3
     fi
     
     # Send the email
-    if echo "$email_body" | mail -s "$subject" "$recipients" 2>/dev/null; then
+    local recipient_list="${recipients//,/ }"
+    
+    # Send the email
+    if echo -e "Subject: $subject\n\n$email_body" | msmtp $recipient_list 2>/dev/null; then
         log "✓ Quota enforcement alert sent to: $recipients"
     else
         warn "Failed to send enforcement alert email"
