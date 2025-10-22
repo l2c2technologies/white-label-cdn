@@ -146,14 +146,17 @@ send_health_alert() {
         return 0
     fi
     
-    # Send email if mail is available and SMTP is configured
-    if command -v mail &>/dev/null; then
+    # Send email if msmtp is available and SMTP is configured
+    if command -v msmtp &>/dev/null; then
         local recipient="${ALERT_EMAIL:-root}"
-        echo "$body" | mail -s "CDN Health Alert: $subject" "$recipient"
-        mark_health_alert_sent "$alert_key"
-        log_info "Health alert sent: $subject"
+        if echo -e "Subject: CDN Health Alert: $subject\n\n$body" | msmtp "$recipient" 2>/dev/null; then
+            mark_health_alert_sent "$alert_key"
+            log_info "Health alert sent: $subject"
+        else
+            log_warn "Failed to send health alert email"
+        fi
     else
-        log_warn "Cannot send alert: mail command not available"
+        log_warn "Cannot send alert: msmtp command not available"
     fi
 }
 
