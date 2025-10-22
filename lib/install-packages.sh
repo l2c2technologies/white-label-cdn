@@ -40,8 +40,8 @@ if [[ "$SMTP_ENABLED" == "true" ]]; then
     log "Testing SMTP configuration..."
     log "Sending test email to: ${ALERT_EMAIL}"
     
-    if echo "CDN system configured successfully at $(date). SMTP is working correctly." | \
-       mail -s "CDN Setup Complete - SMTP Test" "${ALERT_EMAIL}" 2>&1; then
+    if echo -e "Subject: CDN Setup Complete - SMTP Test\n\nCDN system configured successfully at $(date). SMTP is working correctly." | \
+       msmtp "${ALERT_EMAIL}" 2>&1; then
         log "✓ Test email sent successfully!"
         echo ""
         read -p "Did you receive the test email? (yes/no): " EMAIL_RECEIVED
