@@ -1,0 +1,66 @@
+# File: /opt/scripts/cdn/templates/nginx/cdn.conf.template
+# Purpose: Nginx configuration template for Multi-Tenant CDN
+#          Provides HTTP configuration; SSL will be added by certbot
+
+# Cache settings
+proxy_cache_path /var/cache/nginx/cdn levels=1:2 keys_zone=cdn_cache:100m max_size=${CACHE_SIZE} inactive=365d use_temp_path=off;
+
+# Logging format
+log_format cdn_access '\$remote_addr - \$remote_user [\$time_local] '
+                      '"\$request" \$status \$body_bytes_sent '
+                      '"\$http_referer" "\$http_user_agent" '
+                      'tenant=\$tenant cache=\$upstream_cache_status';
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${CDN_DOMAIN};
+    
+    # Logging
+    access_log /var/log/nginx/cdn_access.log cdn_access;
+    error_log /var/log/nginx/cdn_error.log;
+    
+    # Root directory
+    root ${BASE_DIR}/www;
+    
+    # Tenant routing with regex to extract tenant name
+    location ~ ^/([^/]+)/(.*)$ {
+        set \$tenant \$1;
+        alias ${BASE_DIR}/www/\$tenant/\$2;
+        
+        # Aggressive caching
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        
+        # ETag support
+        etag on;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/json application/javascript image/svg+xml;
+        gzip_min_length 1000;
+        
+        # Security: Prevent directory listing
+        autoindex off;
+        
+        # Handle missing files
+        try_files \$uri \$uri/ =404;
+    }
+    
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "OK\n";
+        add_header Content-Type text/plain;
+    }
+    
+    # Block hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}
+
+# SSL configuration will be added by certbot
