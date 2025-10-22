@@ -1,0 +1,41 @@
+# File: /opt/scripts/cdn/templates/systemd/cdn-autocommit@.service
+# Purpose: Systemd service template for CDN auto-commit functionality
+#          One instance per tenant, started with: systemctl start cdn-autocommit@<tenant>.service
+
+[Unit]
+Description=CDN Auto-Commit Service for %i
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cdn_%i
+Group=cdn_%i
+WorkingDirectory=/srv/cdn/sftp/%i/files
+
+# Use unified script with tenant name as parameter
+ExecStart=/usr/local/bin/cdn-autocommit %i
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+# Resource limits
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/cdn/sftp/%i/files /srv/cdn/git/%i.git /var/log/cdn
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cdn-autocommit-%i
+
+[Install]
+WantedBy=multi-user.target
