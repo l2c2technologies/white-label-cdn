@@ -1,7 +1,7 @@
 #!/bin/bash
 # File: /opt/scripts/cdn/lib/install-helpers.sh
 # Purpose: Install helper scripts and set up management tools
-#          Deploys tenant management, quota functions, Gitea integration, and autocommit scripts
+#          Deploys tenant management, quota functions, Gitea integration, autocommit scripts, and SSL setup
 
 install_helper_scripts() {
     echo ""
@@ -88,6 +88,19 @@ install_helper_scripts() {
         warn "Uninstaller not found (optional)"
     fi
 
+    # Install Let's Encrypt setup script (from template)
+    log "Installing Let's Encrypt setup script..."
+    if [[ -f "${SCRIPT_DIR}/templates/letsencrypt-setup.sh.template" ]]; then
+        # Process template with variable substitution
+        process_template "${SCRIPT_DIR}/templates/letsencrypt-setup.sh.template" \
+                         /usr/local/bin/cdn-setup-letsencrypt
+        chmod 755 /usr/local/bin/cdn-setup-letsencrypt
+        log "✓ Installed: /usr/local/bin/cdn-setup-letsencrypt"
+    else
+        warn "Let's Encrypt template not found (optional)"
+        warn "SSL setup will need to be configured manually"
+    fi
+
     # Verify installations
     log "Verifying helper script installations..."
     local verification_failed=0
@@ -138,6 +151,13 @@ install_helper_scripts() {
         ((verification_failed++))
     fi
     
+    # Check Let's Encrypt setup script
+    if [[ -x /usr/local/bin/cdn-setup-letsencrypt ]]; then
+        log "✓ cdn-setup-letsencrypt is executable"
+    else
+        warn "cdn-setup-letsencrypt not installed (optional)"
+    fi
+    
     if [[ $verification_failed -gt 0 ]]; then
         error "Helper script installation verification failed"
         return 1
@@ -155,11 +175,16 @@ install_helper_scripts() {
     log "  • cdn-quota-functions    - Quota management"
     log "  • cdn-gitea-functions    - Gitea integration"
     log "  • cdn-autocommit         - Auto-commit service (used by systemd)"
+    log "  • cdn-setup-letsencrypt  - SSL certificate setup and management"
     log "  • cdn-uninstall          - Complete system removal"
     echo ""
     
     log "Quick start:"
     log "  sudo cdn-tenant-manager create <tenant-name>"
+    echo ""
+    
+    log "SSL setup (after DNS configuration):"
+    log "  sudo cdn-setup-letsencrypt"
     echo ""
     
     return 0
