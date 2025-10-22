@@ -2,6 +2,7 @@
 # File: /opt/scripts/cdn/deploy.sh
 # Purpose: Automated deployment script for Multi-Tenant CDN System
 #          Creates directory structure, installs files, sets permissions, and validates installation
+# Version: 2.0.0 - Added monitoring system support
 
 set -eE
 
@@ -121,7 +122,7 @@ create_directory_structure() {
     mkdir -p "$INSTALL_DIR"
     
     # Create subdirectories
-    mkdir -p "$INSTALL_DIR"/{helpers,includes,lib,templates}
+    mkdir -p "$INSTALL_DIR"/{helpers,includes,lib,templates,monitoring}
     mkdir -p "$INSTALL_DIR"/templates/{nginx,systemd}
     
     log "✓ Directory structure created at: $INSTALL_DIR"
@@ -157,6 +158,8 @@ deploy_all_files() {
     local files_deployed=0
     local files_failed=0
     
+    # ===== MAIN SCRIPTS =====
+    
     # Main orchestrator
     if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-initial-setup.sh" "${INSTALL_DIR}/cdn-initial-setup.sh" 755; then
         ((files_deployed++))
@@ -178,7 +181,18 @@ deploy_all_files() {
         ((files_failed++))
     fi
 
-    # Helper scripts
+    # Monitoring setup script (NEW)
+    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-monitoring-setup.sh" "${INSTALL_DIR}/cdn-monitoring-setup.sh" 755; then
+        ((files_deployed++))
+        log "✓ Deployed monitoring setup script"
+    else
+        ((files_failed++))
+        warn "Monitoring setup script not found (optional)"
+    fi
+
+    # ===== HELPER SCRIPTS =====
+    
+    log "Deploying helper scripts..."
     for helper in cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/helpers/${helper}" "${INSTALL_DIR}/helpers/${helper}" 755; then
             ((files_deployed++))
@@ -187,8 +201,31 @@ deploy_all_files() {
         fi
     done
     
-    # Include files
-    for include in common.sh step1-domains.sh step2-sftp.sh step3-smtp.sh step4-letsencrypt.sh step5-paths.sh step6-gitea-admin.sh step7-summary.sh; do
+    # ===== MONITORING SCRIPTS (NEW) =====
+    
+    log "Deploying monitoring system scripts..."
+    local monitoring_scripts=(
+        "cdn-health-monitor.sh"
+        "cdn-monitoring-control.sh"
+        "cdn-quota-monitor-realtime.sh"
+    )
+    
+    for monitor_script in "${monitoring_scripts[@]}"; do
+        if deploy_file "${SCRIPT_SOURCE_DIR}/monitoring/${monitor_script}" \
+                      "${INSTALL_DIR}/monitoring/${monitor_script}" 755; then
+            ((files_deployed++))
+            log "✓ Deployed monitoring/${monitor_script}"
+        else
+            ((files_failed++))
+            warn "Monitoring script not found: ${monitor_script} (optional)"
+        fi
+    done
+    
+    # ===== INCLUDE FILES =====
+    
+    log "Deploying include files..."
+    for include in common.sh step1-domains.sh step2-sftp.sh step3-smtp.sh \
+                   step4-letsencrypt.sh step5-paths.sh step6-gitea-admin.sh step7-summary.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/includes/${include}" "${INSTALL_DIR}/includes/${include}" 644; then
             ((files_deployed++))
         else
@@ -196,7 +233,9 @@ deploy_all_files() {
         fi
     done
     
-    # Library files
+    # ===== LIBRARY FILES =====
+    
+    log "Deploying library files..."
     for lib in install-packages.sh install-nginx.sh install-gitea.sh install-helpers.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/lib/${lib}" "${INSTALL_DIR}/lib/${lib}" 644; then
             ((files_deployed++))
@@ -205,9 +244,13 @@ deploy_all_files() {
         fi
     done
     
-    # Template files
-    for template in config.env.template gitea-app.ini.template letsencrypt-setup.sh.template msmtprc.template; do
-        if deploy_file "${SCRIPT_SOURCE_DIR}/templates/${template}" "${INSTALL_DIR}/templates/${template}" 644; then
+    # ===== TEMPLATE FILES =====
+    
+    log "Deploying template files..."
+    for template in config.env.template gitea-app.ini.template \
+                    letsencrypt-setup.sh.template msmtprc.template; do
+        if deploy_file "${SCRIPT_SOURCE_DIR}/templates/${template}" \
+                      "${INSTALL_DIR}/templates/${template}" 644; then
             ((files_deployed++))
         else
             ((files_failed++))
@@ -215,33 +258,61 @@ deploy_all_files() {
     done
     
     # Nginx templates
+    log "Deploying Nginx templates..."
     for nginx_template in cdn.conf.template gitea.conf.template; do
-        if deploy_file "${SCRIPT_SOURCE_DIR}/templates/nginx/${nginx_template}" "${INSTALL_DIR}/templates/nginx/${nginx_template}" 644; then
+        if deploy_file "${SCRIPT_SOURCE_DIR}/templates/nginx/${nginx_template}" \
+                      "${INSTALL_DIR}/templates/nginx/${nginx_template}" 644; then
             ((files_deployed++))
         else
             ((files_failed++))
         fi
     done
     
-    # Systemd template
-    if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-autocommit@.service" "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" 644; then
+    # Systemd templates
+    log "Deploying systemd templates..."
+    
+    # Original autocommit template
+    if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-autocommit@.service" \
+                  "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" 644; then
         ((files_deployed++))
     else
         ((files_failed++))
     fi
     
-    # Documentation files
+    # NEW: Quota monitor template
+    if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-quota-monitor@.service" \
+                  "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" 644; then
+        ((files_deployed++))
+        log "✓ Deployed quota monitor systemd template"
+    else
+        ((files_failed++))
+        warn "Quota monitor systemd template not found (optional)"
+    fi
+    
+    # ===== DOCUMENTATION FILES =====
+    
+    log "Deploying documentation files..."
     for doc in INSTALL.md README.md QUICKSTART.md; do
         if [[ -f "${SCRIPT_SOURCE_DIR}/${doc}" ]]; then
             deploy_file "${SCRIPT_SOURCE_DIR}/${doc}" "${INSTALL_DIR}/${doc}" 644
             ((files_deployed++))
+        else
+            warn "Documentation file not found: ${doc} (optional)"
         fi
     done
+    
+    # ===== DEPLOYMENT SCRIPT ITSELF =====
+    
+    # Copy deploy.sh itself to installation directory
+    if [[ -f "${SCRIPT_SOURCE_DIR}/deploy.sh" ]]; then
+        deploy_file "${SCRIPT_SOURCE_DIR}/deploy.sh" "${INSTALL_DIR}/deploy.sh" 755
+        ((files_deployed++))
+    fi
     
     echo ""
     log "✓ Files deployed: $files_deployed"
     if [[ $files_failed -gt 0 ]]; then
-        warn "Files failed: $files_failed"
+        warn "Files failed/skipped: $files_failed"
     fi
 }
 
@@ -254,88 +325,151 @@ validate_deployment() {
  
     local validation_errors=0
 
+    # ===== CHECK MAIN SCRIPTS =====
+    
+    log "Validating main scripts..."
+    
     # Check main orchestrator
-    if [[ ! -x "${INSTALL_DIR}/cdn-initial-setup.sh" ]]; then
-        error "Main orchestrator not executable: cdn-initial-setup.sh"
-        ((validation_errors++))
+    if [[ -x "${INSTALL_DIR}/cdn-initial-setup.sh" ]]; then
+        log "✓ cdn-initial-setup.sh is executable"
     else
-        log "✓ Main orchestrator is executable"
+        error "cdn-initial-setup.sh installation failed"
+        ((validation_errors++))
+    fi
+    
+    # Check tenant manager
+    if [[ -x "${INSTALL_DIR}/cdn-tenant-manager.sh" ]]; then
+        log "✓ cdn-tenant-manager.sh is executable"
+    else
+        error "cdn-tenant-manager.sh installation failed"
+        ((validation_errors++))
+    fi
+    
+    # Check uninstaller
+    if [[ -x "${INSTALL_DIR}/cdn-uninstall.sh" ]]; then
+        log "✓ cdn-uninstall.sh is executable"
+    else
+        error "cdn-uninstall.sh installation failed"
+        ((validation_errors++))
     fi
 
-    # Check tenant manager (NEW)
-    if [[ ! -x "${INSTALL_DIR}/cdn-tenant-manager.sh" ]]; then
-        error "Tenant manager not executable: cdn-tenant-manager.sh"
-        ((validation_errors++))
+    # Check monitoring setup (optional but should warn)
+    if [[ -x "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]]; then
+        log "✓ cdn-monitoring-setup.sh is executable"
     else
-        log "✓ Tenant manager is executable"
+        warn "cdn-monitoring-setup.sh not installed (monitoring features unavailable)"
     fi
 
-    # Check uninstaller (NEW)
-    if [[ ! -x "${INSTALL_DIR}/cdn-uninstall.sh" ]]; then
-        error "Uninstaller not executable: cdn-uninstall.sh"
-        ((validation_errors++))
-    else
-        log "✓ Uninstaller is executable"
-    fi
-
-    # Check helper scripts
+    # ===== CHECK HELPER SCRIPTS =====
+    
+    log "Validating helper scripts..."
     local helpers=(cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh)
     for helper in "${helpers[@]}"; do
-        if [[ ! -x "${INSTALL_DIR}/helpers/${helper}" ]]; then
+        if [[ -x "${INSTALL_DIR}/helpers/${helper}" ]]; then
+            log "✓ ${helper} is executable"
+        else
             error "Helper script not executable: $helper"
             ((validation_errors++))
         fi
     done
-    log "✓ Helper scripts are executable"
     
-    # Check include files
+    # ===== CHECK MONITORING SCRIPTS (NEW) =====
+    
+    log "Validating monitoring scripts..."
+    local monitoring_count=0
+    local monitoring_scripts=(
+        "cdn-health-monitor.sh"
+        "cdn-monitoring-control.sh"
+        "cdn-quota-monitor-realtime.sh"
+    )
+    
+    for monitor_script in "${monitoring_scripts[@]}"; do
+        if [[ -x "${INSTALL_DIR}/monitoring/${monitor_script}" ]]; then
+            log "✓ monitoring/${monitor_script} is executable"
+            ((monitoring_count++))
+        else
+            warn "Monitoring script not found: ${monitor_script} (optional)"
+        fi
+    done
+    
+    if [[ $monitoring_count -eq ${#monitoring_scripts[@]} ]]; then
+        log "✓ All monitoring scripts present"
+    elif [[ $monitoring_count -gt 0 ]]; then
+        warn "Partial monitoring installation: ${monitoring_count}/${#monitoring_scripts[@]} scripts"
+    else
+        warn "No monitoring scripts installed (monitoring features unavailable)"
+    fi
+    
+    # ===== CHECK INCLUDE FILES =====
+    
+    log "Validating include files..."
     local includes=(common.sh step1-domains.sh step2-sftp.sh step3-smtp.sh step4-letsencrypt.sh step5-paths.sh step6-gitea-admin.sh step7-summary.sh)
     for include in "${includes[@]}"; do
-        if [[ ! -f "${INSTALL_DIR}/includes/${include}" ]]; then
+        if [[ -f "${INSTALL_DIR}/includes/${include}" ]]; then
+            log "✓ ${include} present"
+        else
             error "Include file missing: $include"
             ((validation_errors++))
         fi
     done
-    log "✓ Include files present"
     
-    # Check library files
+    # ===== CHECK LIBRARY FILES =====
+    
+    log "Validating library files..."
     local libs=(install-packages.sh install-nginx.sh install-gitea.sh install-helpers.sh)
     for lib in "${libs[@]}"; do
-        if [[ ! -f "${INSTALL_DIR}/lib/${lib}" ]]; then
+        if [[ -f "${INSTALL_DIR}/lib/${lib}" ]]; then
+            log "✓ ${lib} present"
+        else
             error "Library file missing: $lib"
             ((validation_errors++))
         fi
     done
-    log "✓ Library files present"
     
-    # Check templates
+    # ===== CHECK TEMPLATES =====
+    
+    log "Validating templates..."
     local templates=(config.env.template gitea-app.ini.template letsencrypt-setup.sh.template msmtprc.template)
     for template in "${templates[@]}"; do
-        if [[ ! -f "${INSTALL_DIR}/templates/${template}" ]]; then
+        if [[ -f "${INSTALL_DIR}/templates/${template}" ]]; then
+            log "✓ ${template} present"
+        else
             error "Template file missing: $template"
             ((validation_errors++))
         fi
     done
-    log "✓ Template files present"
     
     # Check nginx templates
-    if [[ ! -f "${INSTALL_DIR}/templates/nginx/cdn.conf.template" ]] || \
-       [[ ! -f "${INSTALL_DIR}/templates/nginx/gitea.conf.template" ]]; then
+    if [[ -f "${INSTALL_DIR}/templates/nginx/cdn.conf.template" ]] && \
+       [[ -f "${INSTALL_DIR}/templates/nginx/gitea.conf.template" ]]; then
+        log "✓ Nginx templates present"
+    else
         error "Nginx template files missing"
         ((validation_errors++))
-    else
-        log "✓ Nginx templates present"
     fi
     
-    # Check systemd template
-    if [[ ! -f "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" ]]; then
-        error "Systemd template file missing"
+    # Check systemd templates
+    local systemd_templates=0
+    if [[ -f "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" ]]; then
+        ((systemd_templates++))
+        log "✓ Autocommit systemd template present"
+    else
+        error "Autocommit systemd template missing"
         ((validation_errors++))
-    else
-        log "✓ Systemd template present"
     fi
     
-    # Syntax check on main scripts
+    if [[ -f "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" ]]; then
+        ((systemd_templates++))
+        log "✓ Quota monitor systemd template present"
+    else
+        warn "Quota monitor systemd template not found (monitoring unavailable)"
+    fi
+    
+    # ===== SYNTAX VALIDATION =====
+    
+    log "Running syntax validation..."
+    
+    # Check main scripts syntax
     if ! bash -n "${INSTALL_DIR}/cdn-initial-setup.sh" 2>/dev/null; then
         error "Syntax error in main orchestrator"
         ((validation_errors++))
@@ -343,7 +477,6 @@ validate_deployment() {
         log "✓ Main orchestrator syntax valid"
     fi
     
-    # Syntax check on tenant manager (NEW)
     if ! bash -n "${INSTALL_DIR}/cdn-tenant-manager.sh" 2>/dev/null; then
         error "Syntax error in tenant manager"
         ((validation_errors++))
@@ -351,10 +484,30 @@ validate_deployment() {
         log "✓ Tenant manager syntax valid"
     fi
     
+    # Validate monitoring setup if present
+    if [[ -f "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]]; then
+        if ! bash -n "${INSTALL_DIR}/cdn-monitoring-setup.sh" 2>/dev/null; then
+            warn "Syntax error in monitoring setup script"
+        else
+            log "✓ Monitoring setup syntax valid"
+        fi
+    fi
+    
     echo ""
+    
+    # ===== SUMMARY =====
     
     if [[ $validation_errors -eq 0 ]]; then
         log "✓ Validation passed - deployment is complete and valid"
+        
+        if [[ $monitoring_count -eq ${#monitoring_scripts[@]} ]]; then
+            log "✓ Full installation including monitoring system"
+        elif [[ $monitoring_count -gt 0 ]]; then
+            warn "Partial installation - some monitoring components missing"
+        else
+            warn "Core installation complete - monitoring system not installed"
+        fi
+        
         return 0
     else
         error "Validation failed with $validation_errors error(s)"
@@ -387,6 +540,12 @@ create_symlinks() {
         log "✓ Created symlink: /usr/local/bin/cdn-uninstall"
     fi
 
+    # Create symlink for monitoring setup (if present)
+    if [[ -f "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]] && [[ ! -L /usr/local/bin/cdn-monitoring-setup ]]; then
+        ln -sf "${INSTALL_DIR}/cdn-monitoring-setup.sh" /usr/local/bin/cdn-monitoring-setup
+        log "✓ Created symlink: /usr/local/bin/cdn-monitoring-setup"
+    fi
+
     # Create symlink for deploy script itself
     if [[ -f "${INSTALL_DIR}/deploy.sh" ]] && [[ ! -L /usr/local/bin/cdn-deploy ]]; then
         ln -sf "${INSTALL_DIR}/deploy.sh" /usr/local/bin/cdn-deploy
@@ -401,7 +560,19 @@ create_symlinks() {
 generate_deployment_report() {
     local report_file="${INSTALL_DIR}/deployment-report.txt"
     
-    cat > "$report_file" << EOFREPORT
+    # Check if monitoring is installed
+    local monitoring_status="Not Installed"
+    local monitoring_scripts_installed=0
+    
+    if [[ -f "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]]; then
+        monitoring_status="Installed"
+    fi
+    
+    if [[ -d "${INSTALL_DIR}/monitoring" ]]; then
+        monitoring_scripts_installed=$(find "${INSTALL_DIR}/monitoring" -name "*.sh" -type f | wc -l)
+    fi
+    
+    cat > "$report_file" << EOFCREATE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CDN System Deployment Report
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -410,24 +581,27 @@ Deployment Date: $(date '+%Y-%m-%d %H:%M:%S')
 Installation Directory: ${INSTALL_DIR}
 Deployed By: $(whoami)
 Server: $(hostname)
+Version: 2.0.0 (with monitoring support)
 
 Directory Structure:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${INSTALL_DIR}/
 ├── cdn-initial-setup.sh          # Main orchestrator
-├── cdn-tenant-manager.sh         # Tenant management (NEW)
-├── deploy.sh                      # This deployment script
-├── INSTALL.md                     # Installation guide
-├── README.md                      # Documentation
-├── QUICKSTART.md                  # Quick start guide
-├── deployment-report.txt          # This report
-├── helpers/                       # Runtime helper scripts
+├── cdn-tenant-manager.sh         # Tenant management
+├── cdn-uninstall.sh              # System uninstaller
+├── cdn-monitoring-setup.sh       # Monitoring setup (${monitoring_status})
+├── deploy.sh                     # This deployment script
+├── INSTALL.md                    # Installation guide
+├── README.md                     # Documentation
+├── QUICKSTART.md                 # Quick start guide
+├── deployment-report.txt         # This report
+├── helpers/                      # Runtime helper scripts
 │   ├── cdn-autocommit.sh
 │   ├── cdn-gitea-functions.sh
 │   ├── cdn-quota-functions.sh
 │   └── cdn-tenant-helpers.sh
-├── includes/                      # Setup wizard modules
+├── includes/                     # Setup wizard modules
 │   ├── common.sh
 │   ├── step1-domains.sh
 │   ├── step2-sftp.sh
@@ -436,12 +610,16 @@ ${INSTALL_DIR}/
 │   ├── step5-paths.sh
 │   ├── step6-gitea-admin.sh
 │   └── step7-summary.sh
-├── lib/                          # Installation libraries
+├── lib/                         # Installation libraries
 │   ├── install-packages.sh
 │   ├── install-nginx.sh
 │   ├── install-gitea.sh
 │   └── install-helpers.sh
-└── templates/                    # Configuration templates
+├── monitoring/                  # Monitoring system (${monitoring_scripts_installed} scripts)
+│   ├── cdn-health-monitor.sh
+│   ├── cdn-monitoring-control.sh
+│   └── cdn-quota-monitor-realtime.sh
+└── templates/                   # Configuration templates
     ├── config.env.template
     ├── gitea-app.ini.template
     ├── letsencrypt-setup.sh.template
@@ -450,13 +628,16 @@ ${INSTALL_DIR}/
     │   ├── cdn.conf.template
     │   └── gitea.conf.template
     └── systemd/
-        └── cdn-autocommit@.service
+        ├── cdn-autocommit@.service
+        └── cdn-quota-monitor@.service
 
 Symbolic Links Created:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /usr/local/bin/cdn-initial-setup → ${INSTALL_DIR}/cdn-initial-setup.sh
-/usr/local/bin/cdn-tenant-manager → ${INSTALL_DIR}/cdn-tenant-manager.sh (NEW)
+/usr/local/bin/cdn-tenant-manager → ${INSTALL_DIR}/cdn-tenant-manager.sh
+/usr/local/bin/cdn-uninstall → ${INSTALL_DIR}/cdn-uninstall.sh
+/usr/local/bin/cdn-monitoring-setup → ${INSTALL_DIR}/cdn-monitoring-setup.sh
 /usr/local/bin/cdn-deploy → ${INSTALL_DIR}/deploy.sh
 
 File Permissions:
@@ -464,9 +645,12 @@ File Permissions:
 
 Executable (755):
   - cdn-initial-setup.sh
-  - cdn-tenant-manager.sh (NEW)
+  - cdn-tenant-manager.sh
+  - cdn-uninstall.sh
+  - cdn-monitoring-setup.sh
   - deploy.sh
   - helpers/*.sh
+  - monitoring/*.sh
 
 Readable (644):
   - includes/*.sh
@@ -497,6 +681,9 @@ Next Steps:
    Example:
    sudo cdn-tenant-manager create acmecorp admin@acme.com 500
 
+6. (Optional) Setup monitoring system:
+   sudo cdn-monitoring-setup
+
 Quick Reference - Tenant Management:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -524,6 +711,30 @@ Delete tenant:
 View logs:
   sudo cdn-tenant-manager logs <name>
 
+Monitoring System Features (if installed):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Setup monitoring:
+  sudo cdn-monitoring-setup
+
+Control monitoring:
+  sudo cdn-monitoring-control status          # View all tenant status
+  sudo cdn-monitoring-control start all       # Start all monitors
+  sudo cdn-monitoring-control stop <tenant>   # Stop specific monitor
+  sudo cdn-monitoring-control logs <tenant>   # View monitor logs
+
+System health:
+  sudo cdn-health-monitor check               # Run health check
+  sudo cdn-health-monitor report              # Generate report
+
+Features:
+  • Real-time quota monitoring via inotify
+  • Automatic enforcement at 100% quota
+  • Email alerts at 80%, 90%, 100%
+  • System health monitoring (disk, memory, services)
+  • Git repository integrity checks
+  • Automated log cleanup
+
 Additional Information:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -531,7 +742,15 @@ Additional Information:
 - DEBUG mode available: DEBUG=true sudo cdn-initial-setup
 - Configuration will be stored in: /etc/cdn/
 - Helper scripts will be installed to: /usr/local/bin/
-- Tenant manager coordinates all tenant operations (NEW)
+- Tenant manager coordinates all tenant operations
+- Monitoring system provides real-time quota tracking
+
+Installation Status:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Core System: Installed ✓
+Monitoring System: ${monitoring_status}
+Monitoring Scripts: ${monitoring_scripts_installed}/3
 
 For support and documentation, see:
 ${INSTALL_DIR}/INSTALL.md
@@ -541,7 +760,7 @@ ${INSTALL_DIR}/QUICKSTART.md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Deployment completed successfully!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EOFREPORT
+EOFCREATE
     
     chmod 644 "$report_file"
     log "✓ Deployment report created: $report_file"
@@ -557,6 +776,8 @@ main() {
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║      Multi-Tenant CDN System - Deployment Script          ║
+║                   Version 2.0.0                           ║
+║             (with Monitoring Support)                     ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 
@@ -599,10 +820,24 @@ EOF
     echo "Installation Location: ${INSTALL_DIR}"
     echo "Deployment Report: ${INSTALL_DIR}/deployment-report.txt"
     echo ""
+    
+    # Check monitoring installation
+    if [[ -f "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]]; then
+        log "✓ Core system + Monitoring system installed"
+    else
+        log "✓ Core system installed (monitoring not available)"
+    fi
+    
+    echo ""
     echo "Next Steps:"
     echo "  1. Review: cat ${INSTALL_DIR}/INSTALL.md"
     echo "  2. Run setup: sudo cdn-initial-setup"
     echo "  3. Create tenant: sudo cdn-tenant-manager create <name>"
+    
+    if [[ -f "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]]; then
+        echo "  4. Setup monitoring: sudo cdn-monitoring-setup"
+    fi
+    
     echo ""
     log "Thank you for using the Multi-Tenant CDN System!"
     echo ""
