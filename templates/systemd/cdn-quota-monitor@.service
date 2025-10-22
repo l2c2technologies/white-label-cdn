@@ -1,0 +1,42 @@
+# File: /opt/scripts/cdn/templates/systemd/cdn-quota-monitor@.service
+# Purpose: Systemd service template for per-tenant quota monitoring
+# Usage: systemctl start cdn-quota-monitor@<tenant>.service
+
+[Unit]
+Description=CDN Real-time Quota Monitor for %i
+After=network.target
+Documentation=file:///opt/scripts/cdn/README.md
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/cache/cdn/quota
+
+# Main monitoring script
+ExecStart=/usr/local/bin/cdn-quota-monitor-realtime.sh %i
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+# Resource limits
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=false
+ProtectHome=false
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cdn-quota-monitor-%i
+
+[Install]
+WantedBy=multi-user.target
