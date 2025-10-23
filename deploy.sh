@@ -363,7 +363,7 @@ validate_deployment() {
     # ===== CHECK HELPER SCRIPTS =====
     
     log "Validating helper scripts..."
-    local helpers=(cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh)
+    local helpers=(cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh cdn-setup-letsencrypt.sh)
     for helper in "${helpers[@]}"; do
         if [[ -x "${INSTALL_DIR}/helpers/${helper}" ]]; then
             log "✓ ${helper} is executable"
