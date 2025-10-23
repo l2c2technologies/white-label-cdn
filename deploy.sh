@@ -193,7 +193,7 @@ deploy_all_files() {
     # ===== HELPER SCRIPTS =====
     
     log "Deploying helper scripts..."
-    for helper in cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh; do
+    for helper in cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh cdn-setup-letsencrypt.sh; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/helpers/${helper}" "${INSTALL_DIR}/helpers/${helper}" 755; then
             files_deployed=$((files_deployed + 1))
         else
