@@ -429,7 +429,7 @@ validate_deployment() {
     # ===== CHECK TEMPLATES =====
     
     log "Validating templates..."
-    local templates=(config.env.template gitea-app.ini.template letsencrypt-setup.sh.template msmtprc.template)
+    local templates=(config.env.template gitea-app.ini.template msmtprc.template)
     for template in "${templates[@]}"; do
         if [[ -f "${INSTALL_DIR}/templates/${template}" ]]; then
             log "✓ ${template} present"
