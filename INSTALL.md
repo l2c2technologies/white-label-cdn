@@ -151,5 +151,4 @@ This completes the modular CDN setup system with:
     │   └── cdn-autocommit@.service
     ├── config.env.template
     ├── gitea-app.ini.template
-    ├── letsencrypt-setup.sh.template
     └── msmtprc.template
