@@ -88,19 +88,6 @@ install_helper_scripts() {
         warn "Uninstaller not found (optional)"
     fi
 
-    # Install Let's Encrypt setup script (from template)
-    log "Installing Let's Encrypt setup script..."
-    if [[ -f "${SCRIPT_DIR}/templates/letsencrypt-setup.sh.template" ]]; then
-        # Process template with variable substitution
-        process_template "${SCRIPT_DIR}/templates/letsencrypt-setup.sh.template" \
-                         /usr/local/bin/cdn-setup-letsencrypt
-        chmod 755 /usr/local/bin/cdn-setup-letsencrypt
-        log "✓ Installed: /usr/local/bin/cdn-setup-letsencrypt"
-    else
-        warn "Let's Encrypt template not found (optional)"
-        warn "SSL setup will need to be configured manually"
-    fi
-
     # Verify installations
     log "Verifying helper script installations..."
     local verification_failed=0
