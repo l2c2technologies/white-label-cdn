@@ -600,6 +600,7 @@ ${INSTALL_DIR}/
 │   ├── cdn-autocommit.sh
 │   ├── cdn-gitea-functions.sh
 │   ├── cdn-quota-functions.sh
+│   ├── cdn-setup-letsencrypt.sh
 │   └── cdn-tenant-helpers.sh
 ├── includes/                     # Setup wizard modules
 │   ├── common.sh
@@ -622,7 +623,6 @@ ${INSTALL_DIR}/
 └── templates/                   # Configuration templates
     ├── config.env.template
     ├── gitea-app.ini.template
-    ├── letsencrypt-setup.sh.template
     ├── msmtprc.template
     ├── nginx/
     │   ├── cdn.conf.template
