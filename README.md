@@ -115,6 +115,7 @@ sudo cdn-monitoring-setup
 │   ├── cdn-tenant-helpers.sh
 │   ├── cdn-autocommit.sh
 │   ├── cdn-quota-functions.sh
+│   ├── cdn-setup-letsencrypt.sh
 │   └── cdn-gitea-functions.sh
 ├── includes/               # Setup wizard modules
 ├── lib/                    # Installation libraries
