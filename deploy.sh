@@ -1,8 +1,8 @@
 #!/bin/bash
 # File: /opt/scripts/cdn/deploy.sh
 # Purpose: Automated deployment script for Multi-Tenant CDN System
-#          Creates directory structure, installs files, sets permissions, and validates installation
-# Version: 2.0.0 - Added monitoring system support
+#          Creates directory structure, installs files, corrects paths, and validates installation
+# Version: 2.1.0 - Updated to use /opt/scripts/cdn/* paths internally
 
 set -eE
 
@@ -129,6 +129,32 @@ create_directory_structure() {
 }
 
 # ==============================================================================
+# PATH CORRECTION FUNCTION
+# ==============================================================================
+
+correct_paths_in_file() {
+    local file_path="$1"
+    
+    # Skip if file doesn't exist
+    [[ ! -f "$file_path" ]] && return 0
+    
+    # Correct common path references to use /opt/scripts/cdn structure
+    sed -i \
+        -e 's|/usr/local/bin/cdn-quota-functions|/opt/scripts/cdn/helpers/cdn-quota-functions.sh|g' \
+        -e 's|/usr/local/bin/cdn-tenant-helpers|/opt/scripts/cdn/helpers/cdn-tenant-helpers.sh|g' \
+        -e 's|/usr/local/bin/cdn-gitea-functions|/opt/scripts/cdn/helpers/cdn-gitea-functions.sh|g' \
+        -e 's|/usr/local/bin/cdn-autocommit|/opt/scripts/cdn/helpers/cdn-autocommit.sh|g' \
+        -e 's|/usr/local/bin/cdn-setup-letsencrypt|/opt/scripts/cdn/helpers/cdn-setup-letsencrypt.sh|g' \
+        -e 's|/usr/local/bin/cdn-tenant-manager|/opt/scripts/cdn/cdn-tenant-manager.sh|g' \
+        -e 's|/usr/local/bin/cdn-health-monitor|/opt/scripts/cdn/monitoring/cdn-health-monitor.sh|g' \
+        -e 's|/usr/local/bin/cdn-monitoring-control|/opt/scripts/cdn/monitoring/cdn-monitoring-control.sh|g' \
+        -e 's|/usr/local/bin/cdn-quota-monitor-realtime|/opt/scripts/cdn/monitoring/cdn-quota-monitor-realtime.sh|g' \
+        "$file_path"
+    
+    [[ "$DEBUG" == "true" ]] && log "  Path corrections applied to: $(basename $file_path)"
+}
+
+# ==============================================================================
 # FILE DEPLOYMENT
 # ==============================================================================
 
@@ -136,6 +162,7 @@ deploy_file() {
     local source_file=$1
     local dest_file=$2
     local permissions=${3:-644}
+    local apply_path_correction=${4:-false}
     
     if [[ ! -f "$source_file" ]]; then
         warn "Source file not found: $source_file (skipping)"
@@ -145,6 +172,11 @@ deploy_file() {
     cp "$source_file" "$dest_file"
     chmod "$permissions" "$dest_file"
     
+    # Apply path corrections if requested
+    if [[ "$apply_path_correction" == "true" ]]; then
+        correct_paths_in_file "$dest_file"
+    fi
+    
     if [[ "$DEBUG" == "true" ]]; then
         log "  Deployed: $(basename $dest_file) (mode: $permissions)"
     fi
@@ -153,36 +185,38 @@ deploy_file() {
 }
 
 deploy_all_files() {
-    info "Deploying files..."
+    info "Deploying files with path corrections..."
     
     local files_deployed=0
     local files_failed=0
     
-    # ===== MAIN SCRIPTS =====
+    # ===== MAIN SCRIPTS (with path correction) =====
+    
+    log "Deploying main scripts..."
     
     # Main orchestrator
-    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-initial-setup.sh" "${INSTALL_DIR}/cdn-initial-setup.sh" 755; then
+    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-initial-setup.sh" "${INSTALL_DIR}/cdn-initial-setup.sh" 755 true; then
         files_deployed=$((files_deployed + 1))
     else
         files_failed=$((files_failed + 1))
     fi
 
     # Main tenant manager
-    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-tenant-manager.sh" "${INSTALL_DIR}/cdn-tenant-manager.sh" 755; then
+    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-tenant-manager.sh" "${INSTALL_DIR}/cdn-tenant-manager.sh" 755 true; then
         files_deployed=$((files_deployed + 1))
     else
         files_failed=$((files_failed + 1))
     fi
 
     # Uninstaller
-    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-uninstall.sh" "${INSTALL_DIR}/cdn-uninstall.sh" 755; then
+    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-uninstall.sh" "${INSTALL_DIR}/cdn-uninstall.sh" 755 true; then
         files_deployed=$((files_deployed + 1))
     else
         files_failed=$((files_failed + 1))
     fi
 
-    # Monitoring setup script (NEW)
-    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-monitoring-setup.sh" "${INSTALL_DIR}/cdn-monitoring-setup.sh" 755; then
+    # Monitoring setup script
+    if deploy_file "${SCRIPT_SOURCE_DIR}/cdn-monitoring-setup.sh" "${INSTALL_DIR}/cdn-monitoring-setup.sh" 755 true; then
         files_deployed=$((files_deployed + 1))
         log "✓ Deployed monitoring setup script"
     else
@@ -190,18 +224,18 @@ deploy_all_files() {
         warn "Monitoring setup script not found (optional)"
     fi
 
-    # ===== HELPER SCRIPTS =====
+    # ===== HELPER SCRIPTS (with path correction) =====
     
     log "Deploying helper scripts..."
     for helper in cdn-tenant-helpers.sh cdn-autocommit.sh cdn-quota-functions.sh cdn-gitea-functions.sh cdn-setup-letsencrypt.sh; do
-        if deploy_file "${SCRIPT_SOURCE_DIR}/helpers/${helper}" "${INSTALL_DIR}/helpers/${helper}" 755; then
+        if deploy_file "${SCRIPT_SOURCE_DIR}/helpers/${helper}" "${INSTALL_DIR}/helpers/${helper}" 755 true; then
             files_deployed=$((files_deployed + 1))
         else
             files_failed=$((files_failed + 1))
         fi
     done
     
-    # ===== MONITORING SCRIPTS (NEW) =====
+    # ===== MONITORING SCRIPTS (with path correction) =====
     
     log "Deploying monitoring system scripts..."
     local monitoring_scripts=(
@@ -212,7 +246,7 @@ deploy_all_files() {
     
     for monitor_script in "${monitoring_scripts[@]}"; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/monitoring/${monitor_script}" \
-                      "${INSTALL_DIR}/monitoring/${monitor_script}" 755; then
+                      "${INSTALL_DIR}/monitoring/${monitor_script}" 755 true; then
             files_deployed=$((files_deployed + 1))
             log "✓ Deployed monitoring/${monitor_script}"
         else
@@ -221,36 +255,36 @@ deploy_all_files() {
         fi
     done
     
-    # ===== INCLUDE FILES =====
+    # ===== INCLUDE FILES (no path correction needed) =====
     
     log "Deploying include files..."
     for include in common.sh step1-domains.sh step2-sftp.sh step3-smtp.sh \
                    step4-letsencrypt.sh step5-paths.sh step6-gitea-admin.sh step7-summary.sh; do
-        if deploy_file "${SCRIPT_SOURCE_DIR}/includes/${include}" "${INSTALL_DIR}/includes/${include}" 644; then
+        if deploy_file "${SCRIPT_SOURCE_DIR}/includes/${include}" "${INSTALL_DIR}/includes/${include}" 644 false; then
             files_deployed=$((files_deployed + 1))
         else
             files_failed=$((files_failed + 1))
         fi
     done
     
-    # ===== LIBRARY FILES =====
+    # ===== LIBRARY FILES (with path correction) =====
     
     log "Deploying library files..."
     for lib in install-packages.sh install-nginx.sh install-gitea.sh install-helpers.sh; do
-        if deploy_file "${SCRIPT_SOURCE_DIR}/lib/${lib}" "${INSTALL_DIR}/lib/${lib}" 644; then
+        if deploy_file "${SCRIPT_SOURCE_DIR}/lib/${lib}" "${INSTALL_DIR}/lib/${lib}" 644 true; then
             files_deployed=$((files_deployed + 1))
         else
             files_failed=$((files_failed + 1))
         fi
     done
     
-    # ===== TEMPLATE FILES =====
+    # ===== TEMPLATE FILES (with path correction for systemd) =====
     
     log "Deploying template files..."
     for template in config.env.template gitea-app.ini.template \
                     msmtprc.template; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/templates/${template}" \
-                      "${INSTALL_DIR}/templates/${template}" 644; then
+                      "${INSTALL_DIR}/templates/${template}" 644 false; then
             files_deployed=$((files_deployed + 1))
         else
             files_failed=$((files_failed + 1))
@@ -261,27 +295,27 @@ deploy_all_files() {
     log "Deploying Nginx templates..."
     for nginx_template in cdn.conf.template gitea.conf.template; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/templates/nginx/${nginx_template}" \
-                      "${INSTALL_DIR}/templates/nginx/${nginx_template}" 644; then
+                      "${INSTALL_DIR}/templates/nginx/${nginx_template}" 644 false; then
             files_deployed=$((files_deployed + 1))
         else
             files_failed=$((files_failed + 1))
         fi
     done
     
-    # Systemd templates
+    # Systemd templates (with path correction)
     log "Deploying systemd templates..."
     
-    # Original autocommit template
+    # Autocommit template
     if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-autocommit@.service" \
-                  "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" 644; then
+                  "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" 644 true; then
         files_deployed=$((files_deployed + 1))
     else
         files_failed=$((files_failed + 1))
     fi
     
-    # NEW: Quota monitor template
+    # Quota monitor template
     if deploy_file "${SCRIPT_SOURCE_DIR}/templates/systemd/cdn-quota-monitor@.service" \
-                  "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" 644; then
+                  "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" 644 true; then
         files_deployed=$((files_deployed + 1))
         log "✓ Deployed quota monitor systemd template"
     else
@@ -294,7 +328,7 @@ deploy_all_files() {
     log "Deploying documentation files..."
     for doc in INSTALL.md README.md QUICKSTART.md; do
         if [[ -f "${SCRIPT_SOURCE_DIR}/${doc}" ]]; then
-            deploy_file "${SCRIPT_SOURCE_DIR}/${doc}" "${INSTALL_DIR}/${doc}" 644
+            deploy_file "${SCRIPT_SOURCE_DIR}/${doc}" "${INSTALL_DIR}/${doc}" 644 false
             files_deployed=$((files_deployed + 1))
         else
             warn "Documentation file not found: ${doc} (optional)"
@@ -305,7 +339,7 @@ deploy_all_files() {
     
     # Copy deploy.sh itself to installation directory
     if [[ -f "${SCRIPT_SOURCE_DIR}/deploy.sh" ]]; then
-        deploy_file "${SCRIPT_SOURCE_DIR}/deploy.sh" "${INSTALL_DIR}/deploy.sh" 755
+        deploy_file "${SCRIPT_SOURCE_DIR}/deploy.sh" "${INSTALL_DIR}/deploy.sh" 755 false
         files_deployed=$((files_deployed + 1))
     fi
     
@@ -314,6 +348,7 @@ deploy_all_files() {
     if [[ $files_failed -gt 0 ]]; then
         warn "Files failed/skipped: $files_failed"
     fi
+    log "✓ Path corrections applied to all scripts"
 }
 
 # ==============================================================================
@@ -353,7 +388,7 @@ validate_deployment() {
         validation_errors=$((validation_errors + 1))
     fi
 
-    # Check monitoring setup (optional but should warn)
+    # Check monitoring setup
     if [[ -x "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]]; then
         log "✓ cdn-monitoring-setup.sh is executable"
     else
@@ -373,7 +408,7 @@ validate_deployment() {
         fi
     done
     
-    # ===== CHECK MONITORING SCRIPTS (NEW) =====
+    # ===== CHECK MONITORING SCRIPTS =====
     
     log "Validating monitoring scripts..."
     local monitoring_count=0
@@ -392,12 +427,51 @@ validate_deployment() {
         fi
     done
     
-    if [[ $monitoring_count -eq ${#monitoring_scripts[@]} ]]; then
-        log "✓ All monitoring scripts present"
-    elif [[ $monitoring_count -gt 0 ]]; then
-        warn "Partial monitoring installation: ${monitoring_count}/${#monitoring_scripts[@]} scripts"
+    # ===== VALIDATE PATH CORRECTIONS =====
+    
+    log "Validating path corrections..."
+    
+    # Check that /usr/local/bin references were replaced
+    local bad_refs=0
+    
+    # Check main scripts
+    for script in "${INSTALL_DIR}/cdn-tenant-manager.sh" \
+                  "${INSTALL_DIR}/cdn-monitoring-setup.sh" \
+                  "${INSTALL_DIR}/monitoring/cdn-health-monitor.sh" \
+                  "${INSTALL_DIR}/monitoring/cdn-quota-monitor-realtime.sh"; do
+        if [[ -f "$script" ]]; then
+            if grep -q "/usr/local/bin/cdn-quota-functions" "$script" 2>/dev/null; then
+                error "Found uncorrected path in: $(basename $script)"
+                error "  Still references /usr/local/bin/cdn-quota-functions"
+                ((bad_refs++))
+                ((validation_errors++))
+            fi
+            
+            if grep -q "/usr/local/bin/cdn-tenant-helpers" "$script" 2>/dev/null; then
+                error "Found uncorrected path in: $(basename $script)"
+                error "  Still references /usr/local/bin/cdn-tenant-helpers"
+                ((bad_refs++))
+                ((validation_errors++))
+            fi
+        fi
+    done
+    
+    # Check systemd templates
+    for template in "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" \
+                    "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service"; do
+        if [[ -f "$template" ]]; then
+            if grep -q "/usr/local/bin/cdn-autocommit" "$template" 2>/dev/null; then
+                error "Found uncorrected path in systemd template: $(basename $template)"
+                ((bad_refs++))
+                ((validation_errors++))
+            fi
+        fi
+    done
+    
+    if [[ $bad_refs -eq 0 ]]; then
+        log "✓ All paths correctly reference /opt/scripts/cdn/*"
     else
-        warn "No monitoring scripts installed (monitoring features unavailable)"
+        error "Found $bad_refs uncorrected path reference(s)"
     fi
     
     # ===== CHECK INCLUDE FILES =====
@@ -449,9 +523,7 @@ validate_deployment() {
     fi
     
     # Check systemd templates
-    local systemd_templates=0
     if [[ -f "${INSTALL_DIR}/templates/systemd/cdn-autocommit@.service" ]]; then
-        systemd_templates=$((systemd_templates + 1))
         log "✓ Autocommit systemd template present"
     else
         error "Autocommit systemd template missing"
@@ -459,7 +531,6 @@ validate_deployment() {
     fi
     
     if [[ -f "${INSTALL_DIR}/templates/systemd/cdn-quota-monitor@.service" ]]; then
-        systemd_templates=$((systemd_templates + 1))
         log "✓ Quota monitor systemd template present"
     else
         warn "Quota monitor systemd template not found (monitoring unavailable)"
@@ -499,6 +570,7 @@ validate_deployment() {
     
     if [[ $validation_errors -eq 0 ]]; then
         log "✓ Validation passed - deployment is complete and valid"
+        log "✓ All scripts use /opt/scripts/cdn/* paths internally"
         
         if [[ $monitoring_count -eq ${#monitoring_scripts[@]} ]]; then
             log "✓ Full installation including monitoring system"
@@ -516,42 +588,11 @@ validate_deployment() {
 }
 
 # ==============================================================================
-# CREATE SYMBOLIC LINKS (OPTIONAL)
+# NO SYMLINKS - ALL REFERENCES USE /opt/scripts/cdn/*
 # ==============================================================================
 
-create_symlinks() {
-    info "Creating convenient symbolic links..."
- 
-    # Create symlink for easy access to main script
-    if [[ ! -L /usr/local/bin/cdn-initial-setup ]]; then
-        ln -sf "${INSTALL_DIR}/cdn-initial-setup.sh" /usr/local/bin/cdn-initial-setup
-        log "✓ Created symlink: /usr/local/bin/cdn-initial-setup"
-    fi
-
-    # Create symlink for tenant manager
-    if [[ ! -L /usr/local/bin/cdn-tenant-manager ]]; then
-        ln -sf "${INSTALL_DIR}/cdn-tenant-manager.sh" /usr/local/bin/cdn-tenant-manager
-        log "✓ Created symlink: /usr/local/bin/cdn-tenant-manager"
-    fi
-
-    # Create symlink for uninstaller
-    if [[ ! -L /usr/local/bin/cdn-uninstall ]]; then
-        ln -sf "${INSTALL_DIR}/cdn-uninstall.sh" /usr/local/bin/cdn-uninstall
-        log "✓ Created symlink: /usr/local/bin/cdn-uninstall"
-    fi
-
-    # Create symlink for monitoring setup (if present)
-    if [[ -f "${INSTALL_DIR}/cdn-monitoring-setup.sh" ]] && [[ ! -L /usr/local/bin/cdn-monitoring-setup ]]; then
-        ln -sf "${INSTALL_DIR}/cdn-monitoring-setup.sh" /usr/local/bin/cdn-monitoring-setup
-        log "✓ Created symlink: /usr/local/bin/cdn-monitoring-setup"
-    fi
-
-    # Create symlink for deploy script itself
-    if [[ -f "${INSTALL_DIR}/deploy.sh" ]] && [[ ! -L /usr/local/bin/cdn-deploy ]]; then
-        ln -sf "${INSTALL_DIR}/deploy.sh" /usr/local/bin/cdn-deploy
-        log "✓ Created symlink: /usr/local/bin/cdn-deploy"
-    fi
-}
+# Note: We do NOT create symlinks in /usr/local/bin/
+# All scripts are executed directly from /opt/scripts/cdn/
 
 # ==============================================================================
 # GENERATE DEPLOYMENT REPORT
@@ -581,7 +622,20 @@ Deployment Date: $(date '+%Y-%m-%d %H:%M:%S')
 Installation Directory: ${INSTALL_DIR}
 Deployed By: $(whoami)
 Server: $(hostname)
-Version: 2.0.0 (with monitoring support)
+Version: 2.1.0 (paths use /opt/scripts/cdn/* internally)
+
+IMPORTANT: Path Structure
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All scripts use /opt/scripts/cdn/* paths:
+  • Helper scripts:     /opt/scripts/cdn/helpers/*.sh
+  • Monitoring scripts: /opt/scripts/cdn/monitoring/*.sh
+  • Main scripts:       /opt/scripts/cdn/*.sh
+
+No symlinks are created. All commands use full paths:
+  • sudo /opt/scripts/cdn/cdn-tenant-manager.sh
+  • sudo /opt/scripts/cdn/cdn-initial-setup.sh
+  • sudo /opt/scripts/cdn/cdn-monitoring-setup.sh
 
 Directory Structure:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -631,14 +685,21 @@ ${INSTALL_DIR}/
         ├── cdn-autocommit@.service
         └── cdn-quota-monitor@.service
 
-Symbolic Links Created:
+Path Correction Details:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/usr/local/bin/cdn-initial-setup → ${INSTALL_DIR}/cdn-initial-setup.sh
-/usr/local/bin/cdn-tenant-manager → ${INSTALL_DIR}/cdn-tenant-manager.sh
-/usr/local/bin/cdn-uninstall → ${INSTALL_DIR}/cdn-uninstall.sh
-/usr/local/bin/cdn-monitoring-setup → ${INSTALL_DIR}/cdn-monitoring-setup.sh
-/usr/local/bin/cdn-deploy → ${INSTALL_DIR}/deploy.sh
+All references to /usr/local/bin/* have been replaced with:
+  /usr/local/bin/cdn-quota-functions 
+    → /opt/scripts/cdn/helpers/cdn-quota-functions.sh
+  
+  /usr/local/bin/cdn-tenant-helpers
+    → /opt/scripts/cdn/helpers/cdn-tenant-helpers.sh
+  
+  /usr/local/bin/cdn-gitea-functions
+    → /opt/scripts/cdn/helpers/cdn-gitea-functions.sh
+  
+  /usr/local/bin/cdn-autocommit
+    → /opt/scripts/cdn/helpers/cdn-autocommit.sh
 
 File Permissions:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -666,23 +727,20 @@ Next Steps:
 
 2. Run the initial setup wizard:
    sudo ${INSTALL_DIR}/cdn-initial-setup.sh
-   
-   Or using the symlink:
-   sudo cdn-initial-setup
 
 3. Configure DNS for your domains
 
 4. Setup SSL certificates:
-   sudo cdn-setup-letsencrypt
+   sudo ${INSTALL_DIR}/helpers/cdn-setup-letsencrypt.sh
 
 5. Create your first tenant:
-   sudo cdn-tenant-manager create <tenant-name>
+   sudo ${INSTALL_DIR}/cdn-tenant-manager.sh create <tenant-name>
    
    Example:
-   sudo cdn-tenant-manager create acmecorp admin@acme.com 500
+   sudo ${INSTALL_DIR}/cdn-tenant-manager.sh create acmecorp admin@acme.com 500
 
 6. (Optional) Setup monitoring system:
-   sudo cdn-monitoring-setup
+   sudo ${INSTALL_DIR}/cdn-monitoring-setup.sh
 
 Quick Reference - Tenant Management:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -734,6 +792,7 @@ Features:
   • System health monitoring (disk, memory, services)
   • Git repository integrity checks
   • Automated log cleanup
+  • Uses /opt/scripts/cdn/* paths for consistency
 
 Additional Information:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -741,9 +800,10 @@ Additional Information:
 - All scripts include comprehensive error handling
 - DEBUG mode available: DEBUG=true sudo cdn-initial-setup
 - Configuration will be stored in: /etc/cdn/
-- Helper scripts will be installed to: /usr/local/bin/
-- Tenant manager coordinates all tenant operations
-- Monitoring system provides real-time quota tracking
+- Helper scripts are in: ${INSTALL_DIR}/helpers/
+- Monitoring scripts are in: ${INSTALL_DIR}/monitoring/
+- User commands via symlinks: /usr/local/bin/cdn-*
+- Scripts internally use: /opt/scripts/cdn/* paths
 
 Installation Status:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -751,6 +811,7 @@ Installation Status:
 Core System: Installed ✓
 Monitoring System: ${monitoring_status}
 Monitoring Scripts: ${monitoring_scripts_installed}/3
+Path Structure: /opt/scripts/cdn/* (corrected) ✓
 
 For support and documentation, see:
 ${INSTALL_DIR}/INSTALL.md
@@ -759,6 +820,7 @@ ${INSTALL_DIR}/QUICKSTART.md
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Deployment completed successfully!
+All internal paths use /opt/scripts/cdn/* structure.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOFCREATE
     
@@ -776,12 +838,15 @@ main() {
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║      Multi-Tenant CDN System - Deployment Script          ║
-║                   Version 2.0.0                           ║
-║             (with Monitoring Support)                     ║
+║                   Version 2.1.0                           ║
+║        (With /opt/scripts/cdn/* Path Structure)           ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 
-This script will deploy the CDN system to your server.
+This script will deploy the CDN system with corrected paths.
+
+All scripts will internally reference /opt/scripts/cdn/* paths.
+User-facing commands available via /usr/local/bin/cdn-* symlinks.
 
 EOF
 
@@ -829,6 +894,10 @@ EOF
     fi
     
     echo ""
+    log "✓ All scripts use /opt/scripts/cdn/* paths internally"
+    log "✓ User commands available via /usr/local/bin/cdn-* symlinks"
+    echo ""
+    
     echo "Next Steps:"
     echo "  1. Review: cat ${INSTALL_DIR}/INSTALL.md"
     echo "  2. Run setup: sudo cdn-initial-setup"
