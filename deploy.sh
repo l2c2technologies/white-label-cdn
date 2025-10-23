@@ -248,7 +248,7 @@ deploy_all_files() {
     
     log "Deploying template files..."
     for template in config.env.template gitea-app.ini.template \
-                    letsencrypt-setup.sh.template msmtprc.template; do
+                    msmtprc.template; do
         if deploy_file "${SCRIPT_SOURCE_DIR}/templates/${template}" \
                       "${INSTALL_DIR}/templates/${template}" 644; then
             files_deployed=$((files_deployed + 1))
